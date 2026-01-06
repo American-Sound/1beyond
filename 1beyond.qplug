@@ -53,7 +53,7 @@ end
 
 function UNAPEncode(uname, pwd)
   if string.len(uname) > 0 and string.len(pwd) > 0  then
-    local data = Username.String .. ":" .. Password.String
+    local data = uname .. ":" .. pwd
     local data_encoded = to_base64(data)
     if DebugInfo then print(data_encoded) end
     return to_base64(data)
