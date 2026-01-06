@@ -1,0 +1,1418 @@
+--[[ BEGIN DIGITAL SIGNATURE
+QnJhbmRvbiBSLiBTdWRsZXI=
+END DIGITAL SIGNATURE ]]
+-- Automate VX Control
+-- by Brandon R. Sudler
+-- May 2025
+
+PluginInfo = {
+    Name = "Crestron~1 Beyond Automate VX" ,
+    Version = "0.2",
+    BuildVersion = "0.2.0.0",
+    Id = "QXV0b21hdGVWWHYwLjA=",
+    Description = "Plugin to control 1Beyond Automate VX via HTTP",
+    Author = "ASEI",
+    IsManaged = false,
+    Model = "Automate VX",
+    Type = Reflect and Reflect.Types.Other or 0,
+}
+
+function GetColor(props)
+  return {167, 214, 213}
+end
+
+function GetPrettyName(props)
+  return "1 Beyond Atomate VX\nv" .. PluginInfo.Version
+end
+
+pagenames = {"Setup", "Control"}
+
+function GetPages(props)
+  local pages = {}
+  for ix,name in ipairs(pagenames) do
+    table.insert(pages,{name = pagenames[ix]})
+  end
+  return pages
+end
+
+function GetProperties()
+  local props = {}
+  table.insert(props,{
+    Name    = "Debug Print",
+    Type    = "enum",
+    Choices = {"None", "Function Calls", "Notification", "All"},
+    Value   = "None"}
+  )
+  return props
+end
+
+function RectifyProperties(props)
+  if props.plugin_show_debug.Value == false then 
+    props["Debug Print"].IsHidden = true 
+  end
+  return props
+end
+
+function GetControls(props)
+  local controls = {}
+  controls = {
+    {
+      Name          = "Status",
+      ControlType   = "Indicator",
+      IndicatorType = Reflect and "StatusGP" or "Status",
+      PinStyle      = "Output",
+      UserPin       = true
+    },
+    {
+      Name          = "AutoSwitchStatus",
+      ControlType   = "Indicator",
+      IndicatorType = "LED",
+      PinStyle      = "Output",
+      UserPin = true
+    },
+    {
+      Name          = "Username",
+      ControlType   = "Text",
+      UserPin       = true,
+      PinStyle      = "Both"
+    },
+    {
+      Name          = "Password",
+      ControlType   = "Text",
+      UserPin       = true,
+      PinStyle      = "Both"
+    },
+    {
+      Name          = "ServerURL",
+      ControlType   = "Text",
+      UserPin       = true,
+      PinStyle      = "Both"
+    },
+    {
+      Name          = "Reconnect",
+      ControlType   = "Button",
+      ButtonType    = "Trigger",
+      UserPin       = true,
+      PinStyle      = "Input"
+    },
+    {
+      Name          = "AutoSwitchEnable",
+      ControlType   = "Button",
+      ButtonType    = "Toggle",
+      UserPin       = true,
+      PinStyle      = "Both"
+    },
+    {
+      Name          = "LayoutSelect",
+      ControlType   = "Text",
+      ButtonType    = "ComboBox",
+      UserPin       = true,
+      PinStyle      = "Both"
+    },
+    {
+      Name          = "SceneSelect",
+      ControlType   = "Text",
+      ButtonType    = "ComboBox",
+      UserPin       = true,
+      PinStyle      = "Both"
+    },
+    {
+      Name          = "CameraSelect",
+      ControlType   = "Text",
+      ButtonType    = "ComboBox",
+      UserPin       = true,
+      PinStyle      = "Both"
+    },
+    {
+      Name          = "CameraPTZUp",
+      ControlType   = "Button",
+      ButtonType    = "Momentary",
+      UserPin       = true,
+      PinStyle      = "Both",
+      Icon          = "Arrow Up"
+    },
+    {
+      Name          = "CameraPTZDown",
+      ControlType   = "Button",
+      ButtonType    = "Momentary",
+      UserPin       = true,
+      PinStyle      = "Both",
+      Icon          = "Arrow Down"
+    },
+    {
+      Name          = "CameraPTZLeft",
+      ControlType   = "Button",
+      ButtonType    = "Momentary",
+      UserPin       = true,
+      PinStyle      = "Both",
+      Icon          = "Arrow Left"
+    },
+    {
+      Name          = "CameraPTZRight",
+      ControlType   = "Button",
+      ButtonType    = "Momentary",
+      UserPin       = true,
+      PinStyle      = "Both",
+      Icon          = "Arrow Right"
+    },
+    {
+      Name          = "CameraPTZZoomIn",
+      ControlType   = "Button",
+      ButtonType    = "Momentary",
+      UserPin       = true,
+      PinStyle      = "Both",
+      Icon          = "Zoom In"
+    },
+    {
+      Name          = "CameraPTZZoomOut",
+      ControlType   = "Button",
+      ButtonType    = "Momentary",
+      UserPin       = true,
+      PinStyle      = "Both",
+      Icon          = "Zoom Out"
+    },
+    {
+      Name          = "CameraTrackOn",
+      ControlType   = "Button",
+      ButtonType    = "StateTrigger",
+      Min           = 0,
+      Max           = 1,
+      PinStyle      = "Both",
+      UserPin       = true
+    },
+    {
+      Name          = "CameraTrackOff",
+      ControlType   = "Button",
+      ButtonType    = "StateTrigger",
+      Min           = 0,
+      Max           = 1,
+      PinStyle      = "Both",
+      UserPin       = true
+    },
+    {
+      Name          = "CameraPresetNumber",
+        ControlType = "Knob",
+        ControlUnit = "Integer",
+        Min         = 2,
+        Max         = 100,
+        UserPin     = true,
+        PinStyle    = "Both"
+    },
+    {
+      Name          = "CameraPresetRecall",
+      ControlType   = "Button",
+      ButtonType    = "Trigger",
+      UserPin       = true,
+      PinStyle      = "Both"
+    },
+    {
+      Name          = "CameraPresetSave",
+      ControlType   = "Button",
+      ButtonType    = "Trigger",
+      UserPin       = true,
+      PinStyle      = "Input"
+    },
+    {
+      Name          = "RestartVX",
+      ControlType   = "Button",
+      ButtonType    = "Trigger",
+      UserPin       = true,
+      PinStyle      = "Input"
+    },
+  }
+  return controls
+end
+
+function GetControlLayout(props)
+  local layout   = {}
+  local graphics = {}
+  -- Color Scheme
+  local Color = {
+    Clear     = {0,0,0,0},
+    White     = {255,255,255},
+    Black     = {0,0,0},
+    Gray      = {128,128,128},
+    Red       = {223,0,36},
+    DarkRed   = {108,0,13},
+    Blue      = {16,16,255},
+    Green     = {32,255,16},
+    DarkGreen = {0,75,22},
+    LightGray = {230,230,230},
+    BoldText  = {27,33,43},
+    MainText  = {51,51,51}
+  }
+  local Logo = "iVBORw0KGgoAAAANSUhEUgAAAasAAAB2CAMAAABBGEwaAAAAwFBMVEX///8bVbIW29svqe0ASa4ATK8WU7EuYbcARq31+PwARK2dr9gAS68CTrCJns+No9K3xOLI0+np7vcAQay43vgbpeygstm+yOM7Z7nV3e7j5/MiWrTa4vBDa7ry9fqXq9Zjg8R7lcyvvt9sisdYe8GxwOBUeMBzj8lLcr1mhsXu/Pymt9vi+flv5eXk8vyEx/MAn+txv/HM5/qX7OxQ4eG48fHH9PSi7e1b4+Or1/ZBr+4AOKmWzvRYtvDH5PkAMaevxPD4AAAPa0lEQVR4nO2deXviNhDGIbEV49hcXgKEOxdkkz2TPbrttt//W9UGa2Z0jI1ZeNZu/f7Trg9Z0k8jjUYSaTRq1apVq1a2hr87A7X2VGspfncWau2nrhte/O481NpHraUvRM2qCuoGYbNZs6qAEqNq1qyqoK4XG1XNqgKa74yqZlV+dZ2dUdWsyq75nTSqmlXJdY9GVbMqtRSjqlmVWapR1azKK92oalal1Y1uVDWrkmr+4OlGVbMqp2xGVbMqo/pWo6pZlVCMUdWsSifWqGpWZdOTxxlVzapc6m94o6pZlUqZRlWzKpOGUZZR1azKpKGTjapmVR7VrKqjmlV1VLOqjmpW1VHNqjqqWVVHNavqqGZVHdWsqqOaVXVUs6qOCrGav//8+e/Pn9+3Tpmja9Apv1J+zaEe+umVfVm9/+PTj48D0M8Pb97/Uk4WC+ZG608/1Z8nbRKl16WsiGiVXkFWws1g9SbmdE41GHw8//D50HzMH6JL5lYLMuT9v1k9BWk9hO30CrAKZk9WWCkrlZTkdf7X/JBsDJ3QrVnliGUlok6jZ+0OM1htcX0q3hfe+qJZs8oTxyqYTBsHsUpofShWpz2RbBqoWeXJzkpE238dxiqh9UeBLLR3mwZqVnmysgqb4+3/HsoqpvVz32q9HqU5qFnlycLK86VLeDir2LT+3uv7V7ATp2aVJwsrvydv/gKr8/OPf+V/fb7xINmaVZ5MVlOskF9idT74kPfxLt2JWLPKk8mK6NdYnQ8+ZX/7VjkyWbPK0ylZZcPqh+r23ppVnk7K6vxjRsxp6qvJFmF13V20V+v2ojvdu6Dz/vwUpFtxusXe2Dcjrd5TZ7VqL+7H8spJ+8DzrAjG1FOT3ZvVdVv4jhvGcgPfWeb/Smivcyccz/OccNMe6vV03QfZqrBPpN2ad1czd5tuc7kYW95NuKjvdteTYJeRTs/6Arx4NfO9ICljGHiyjCdkNfiZmZ0DWc0fo5AMcyJ0XC5Av9V45Xih2L0h4qf9pVpLo0hG8aM78+3+Pz4E+Z+UO8O7yEnTjZN1vbBtWbFpp5HxaJaUo+OQNzzBlTf+6toP1DKK5OOnY5Xnsx/GqmsetxRB2GU/8uCH2lGK0B9RWmQJyDIcLlz8Cr3enejHnkTo3xm0OmlmxUP8IddVXwlCpktY+GYZnYvpyVgNBulQ9fYdV43FWTkyHqXnyF/aX13ZH4+WhIqAR5x7I4EJ3KTWez2zHlALYV1JirCyZSWy1HmjP7LXejS8OQ2rwY+0Np7Pzr7Y63HHCp3BPViJW24dNJxYRvjriX0BLn5coFPSwR9wezAqANuTjx+4MX6eRSqYqKaFrOw593S4cZ/tcIk7D/LOUVnBNPjbWSw7goSV8Nv3srHswarJH+ITQh/6Mw+Sxa1UPtaP4GqkA1/DB8M1XFyxqJJ0ldEQ2oFgcu5f6VWelWnIzBFZfXyTJvAuQXX2wrEKJuN4AEqT3YdVhkRTG22yz/yRSoXm2gxutE9jG/fBEFnbTtOlg1An+4Rokq5qiNcZ7QB1PFbgqr89S2VnFfmdRuMwVrEfFUstVrhR855zPFNA7Q+hoxNqEpg3cmeV03JERNz3fFah0u+2hJppSzG3Lx3KStt2ga76V4nKbljjyVSpj/1ZhZ7zsGq3HyeR4lk5NIG+ozi9gRd7zvG8hl6EPwmA13y1I93A4560lidlBi+26SrJxtcwEY1VMmWIs0H98WZEp/NL5XcaHX+zNovZPJDVYDD48fPTz+S/0P9JV/3lDGVDkI4NhVkJ/1Z2X/3LZkDuRKSmZ1hqETiPT+N4zjsddkbEHYYhaAHXAmUO1QcuYpJeusbBLfH+H57G/f71sN2kLSOcMaxCZzWMszG+IasLzZC4F0PSEIS/ke2jfyloMQ9iNRj8lTrmrb8/7WiBq954Jag4V/AQVu5M6eEXpIMPl3D5CWtDOJdkJJsu8QU/7a3QuxAzJW1wI4HhiPyUrH+LbWNIXU4PiCus/DXk4x6hiCZ+sEnKIlQnRenRi7NSF+rnnwaqq071aqYtVZCVs9buUh8XBuoW9hrhTHPuhgALyNxBlVLTxMmVcNIrN6QJuGr8Y0WqP5BQKCuf2ixpS9jv3hCHd6Z5Sj3Fcouy+qE7uJ/PPyquOtVbM/FUxVi5t8btKZYC+pMF9BmhMWdqjGEiKw0Lp1E0E2OofagbbPhios8RrhBWIOfNhFWg1u8MZ+DgOF6QBmYWk0y/i7KyhGXnqqu+XydYiJV1Kz328tD+waxgoKG6l2hCSR4taISPrQ1rI35hYEznGh28G8pLOM/WMoJJQbnHxDItYWQymBVlxeutQers7Dv7dCFWvnUNBL0nb9cvYYzPt8a/pX8nnLROLmG0IfMdaMgwDqJf6NvC5BvDVjqM1xIXyjTaNjzsWwOFt6HxCtFBrL5aUHGxi0YxVsR5oLrWyw2lEpbQeYP0ebJO5+BdYNivawBHH8SeEfQbpcEiK1+3Q+gEw8f0CnSw+jTPTP5IrF6sqM6eueeLsPKYRR/wDdIuDGaUDvOC7POg0GCaWLgHo1+EcJgebZCCXlO4uwsYY2rqz6709oQoHCb+Dk3wSKzMoSpnwCrACoYjIw1ZibuFC2JnV1Y9QScox/AevCK7WVJ1csUFq9fe8GOvRUsFWRkuzpWrJQYdtwRtCHAciZXhAaayxwQbxVjZezRar9uuhixJha5VGI+QSYB3EXZ2F2AIA0cBJ1euHnGVQoPe8QVWoeG/YvtK28sVXOCKCWPcsfpAhhW3ilWElaxGU+C2e8nQcsUthZiCYQRrKnXYAB6OYEL5ik2PofpSh++1oG4lK3At+GJe6F23Lb0CrL7bWbGz4QKsdF/KLMRugMqPmII86VjO0TS3IMCBFp6cR7awhzMd9p10Nh2+/qG/lMMhDHYBZ7WNuyOz4jpB7vkirPQlC9BIYbUqwAosRBu4IQ1cuEI32+c2IoFFp28hK2NPiMEKbJIvpvSAjsXK7rIfhxVrVwezQkcRDWnrssGQhnFwworbZvYrrKCxsKNhY3lku3o+HSuzwFI4kiR13y5gV+jUX9DIE+SKuHw4d2Bcdjrm7KJdHW38IjJYrbI88p1mhVk1jbkC1SlZmcHA9AkcSZJavNzft/AwEAIHbpOaeFDgp4LJKjcBggFFjk9FWHXyZgSxC5VBs6dtNZIVwqWV6IR9oOD+YDjOa7ZBI+qzO9kiJ/tbMqYUO+kQoVD6kI3u1xuCRcdgtyWqCCvYpQSRL/YVG6sxwyprV/CX07GiVqAIm+TW4SZz4c4wW3RjIThi3hjGHWWIbKufMdVj58J7sCINjtnumDEDoIVWxEVutmJiTEdhFZpbtLaCzintJWH44rt+i8C7CFdyYFAjJWivTLALI1Xpe0VYNZgVT1SYVay5fbzKrAEG1THmV2Suo+geHkjdXYzdukXOG4A3ybBu5dTmlI/d7sOKRPGt4+ElLsrZAGjbaqAofHk51+IYcYs4k9bwC25NSReacGeSW8SwbtRdDU1j0ovrx47Nr8a1Qk9fE9mHFWyBjivY0sT6uNhoZbWxsmo67ESHjd1+414oti7sWeoIaxA8KELPEg66ukxjuJcLxU5b+pZXWK5IhRFe28LYGve+S0+5EKs5WUw0V7NJS7Czss9URMAOWJxZnX3l3ii438I3msktWoMnB2XsLoRj+COPvgzhOtrsQ59EG0CwvoSj3yMbB6EtF2JFFhObrtGBkI1ZdlZdo1eIFYx4P/CVY8VuuCi6j8lX/Yv+BrNI3DNiIL4asmnd4exL7x+043vmqEQMS6itZv5A8gFNoBgruqEtvFDm29MJbUZWVn26HU7mkXHGEnE94JHWhXcZFU/Qm8879MCGh75ul9S6NyND9Q3ZWW6OuyOlE7T4znekyhw8GzRf0KNGuE26GCuyw2Nbz0Dreq1unbY7dxN9wBK+efAFxPnrGctXh+y7Dfy7RbfXu+9s1GNz1AxopQrHebyMX+he3Tp0z6vpbt0rn7K4UHNlO68Xrp6GveHiQdkZ6+K2uIKsWsoG2zAade6TYo4irW+2s9IHrLApYb+a1c9bFT9cHbif3Q0cJ1B3egvFaWs16U0RukmUwlXecB/Nb9HKCmwZ6ik9jQiDJFk1HyTUUZBVY6j2Y9vkA3NDu53VWO3BPTnkJT7Eq7qHggsuZXeBRzsn0ozUHqvPnmOSBbaFoEnbFPZT/1f2+AC+JshoXpRVo2OPFMlHZdbtMxHaCYpIfjFdpHqHtL6yXsX2QTuFREVYXWQE0H09RjfNhmU9XUcjNVyQZGGO4TRZ5RxYYVaNdUbDdLPi7A3q/ZJdwaSze/fty5dvL8xiMIjdxVSIlTfdsBF0A1VsWZMMtO7IHtHAGWXELXzcZJwWci+UFlCcFd1rrUpEQ2n1DCuMq4Crbturma2M7ezFWDWW9j5CRNbZ+ZItt88trwArc+cRaMydUhSRttv+AFbk18R0VDD/44J86X101TPHJbt4z6Ioq7gHMkuyPaRu1VDYJogiENwCFI7P3F7Erda6Z7aV09TfOYRVY3ph6Qfd5rSRy2q+ncGgq8775QeZ1V6sxE7bhYbpTDumKZyQXfSOW6nQ/1KocAT/vGVPp1XTZaS5Z8ITpm133DTrNlbpLYNVo/Ek1LFWpCf8V+HuDTZ43napq543MhU1q5hVmmWri5yoFaUhoT931tO7851Q5trxR+xWkp2GS89z5eOu599l/NAMuhb83g75aGfiB3nJtmU4yzdZyVI5tlbR3UAZw9Dz0mnx2ktTYyPSoeqqFxZ/7mCbq3CyU0Zr1zUfdpazi8lkdNfuctu/qHpX6038+MXsdpH90zq4s5bb4kt1fdN+GO2T7CFKyhgnPpktiyQ+/Ec2Cm7NN1v82auyiRzeYPdTllwyopwRl8gQuxpSPuGhU3a3ZjX0NnO2yyq7ByyXcD3YEn6qkA5w1bf63fkuIDyvaz9iVxUd4KpvlRGxKJ1gJZHbnFINHeZV5LjrJRPuGPPyfz+yzDrMrqqEioSXMjcWV0CHwKoUKlzAZ2fllRF3WOc/gopsKvwP/Fx1UU+wSm6Fcso9Y0NJZVQowpSxvFhK4Yowu3BVLe0/aGX8WlY5BZFt9mh11fS8X5y9akZFznbbfxKmmtpj1Hqt1ki1Ff5oy3/qrydnb4OhG2aqI/xBHydnOaxqes7YtFmdFRAqPM7D/WhLhfX8YlrX929VNKlEvUguqAdVXbjK0fOXl3ffXxO9e3n5UlVOidajWaqLai9c1apVq9b/RP8CRK8qMAfsrREAAAAASUVORK5CYII="
+  local defaults = {
+    --Graphics
+    GroupBox = {
+      Fill           = Color.LightGray,
+      CornerRadius   = 0,
+      StrokeWidth    = 0
+    },
+    Label = {
+      HTextAlign     = "Right",
+      Fill           = Color.Clear,
+      Font           = "Roboto",
+      Color          = Color.MainText,
+      FontSize       = 12,
+      Size           = {153,18}
+    },
+    Header = {
+      HTextAlign     = "Center",
+      Fill           = Color.Clear,
+      Font           = "Roboto",
+      Color          = Color.BoldText,
+      FontSize       = 15,
+      Size           = {365,18}
+    },
+    -- Controls
+    ComboBox = {
+      Font           = "Roboto",
+      TextColor      = Color.MainText,
+      FontSize       = 14,
+      Size           = {200,18}
+    },
+    Text = {
+      Font           = "Roboto",
+      TextColor      = Color.MainText,
+      FontSize       = 14,
+      Size           = {200,18}
+    },
+    Button = {
+      UnlinkOffColor = true,
+      Color          = Color.Blue,
+      OffColor       = Color.Gray,
+      Font           = "Roboto",
+      TextColor      = Color.MainText,
+      FontSize       = 14,
+      Size           = {35,18}    
+    },
+    RecallButton = {
+      UnlinkOffColor = true,
+      Color          = Color.Green,
+      OffColor       = Color.DarkGreen,
+      Font           = "Roboto",
+      TextColor      = Color.White,
+      FontSize       = 9,
+      Size           = {32,32}    
+    },
+    SaveButton = {
+      UnlinkOffColor = true,
+      Color          = Color.Red,
+      OffColor       = Color.DarkRed,
+      Font           = "Roboto",
+      TextColor      = Color.White,
+      FontSize       = 9,
+      Size           = {32,32}    
+    },
+    Led = {
+      UnlinkOffColor = true,
+      Color          = Color.Green,
+      OffColor       = Color.Gray,
+      Size           = {18,18}
+    },
+  }
+  local CurrentPage = pagenames[props["page_index"].Value]
+  local y = 10
+  local x = 10
+
+  -- These controls are only pins
+  layout["Reconnect"] = {
+    PrettyName = "Reconnect",
+    Style      = "None",
+  }
+  
+  if CurrentPage == "Setup" then
+    table.insert(graphics,{
+      Type          = "GroupBox",
+      Fill          = Color.White,
+      Position      = {0,0},
+      Size          = {385,269}
+    })
+    table.insert(graphics,{
+      Type          = "Image",
+      Image         = Logo,
+      Position      = {90, y},
+      Size          = {205, 51}
+    })
+    y = y + 51
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Setup",
+      HTextAlign    = "Left",
+      Color         = Color.BoldText,
+      FontStyle     = "Bold",
+      FontSize      = 18,
+      Size          = {150, 22},
+      Position      = {5, y}
+    })
+    y = y + 22
+    table.insert(graphics,{
+      Type          = "GroupBox",
+      Position      = {5,y},
+      Size          = {375, 84}
+    })
+    y = y + 10
+  
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "URL/IP:",
+      Position      = {10, y}
+    })
+    layout["ServerURL"] = {
+      PrettyName    = "Setup~Server URL",
+      Style         = "Text",
+      Position      = { 165, y },
+      Size          = {200, 18}
+    }
+    y = y + 26
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Username:",
+      Position      = {10, y}
+    })
+    layout["Username"] = {
+      PrettyName    = "Setup~Username",
+      Style         = "Text",
+      Position      = {165, y},
+      Size          = {200, 18}
+    }
+    y = y + 20
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Password:",
+      Position      = {10, y}
+    })
+    layout["Password"] = {
+      PrettyName    = "Setup~Password",
+      Style         = "Text",
+      Position      = {165, y},
+      Size          = {200, 18}
+    }
+    y = y + 28
+  
+    y = y + 10
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Status",
+      HTextAlign    = "Left",
+      Color         = Color.BoldText,
+      FontStyle     = "Bold",
+      FontSize      = 18,
+      Size          = {150, 22},
+      Position      = {5, y}
+    })
+    y = y + 22
+    table.insert(graphics,{
+      Type          = "GroupBox",
+      Position      = {5, y},
+      Size          = {375,56}
+    })
+    y = y + 10
+  
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Status:",
+      Position      = {10, y+9}
+    })
+    layout["Status"] = {
+      PrettyName    = "Status",
+      Style         = "Text",
+      IsReadOnly    = true,
+      Position      = { 165, y },
+      Font          = "Roboto",
+      TextColor     = Color.MainText,
+      FontSize      = 14,
+      Size          = {200,36}
+    }
+    y = y + 40
+  
+  -- Control Page
+  elseif CurrentPage == "Control" then
+    table.insert(graphics,{
+      Type          = "GroupBox",
+      Fill          = Color.White,
+      Position      = {0,0},
+      Size          = {385,537}
+    })
+    table.insert(graphics,{
+      Type          = "Image",
+      Image         = Logo,
+      Position      = {90, y},
+      Size          = {205, 51}
+    })
+    y = y + 51
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Control",
+      HTextAlign    = "Left",
+      Color         = Color.BoldText,
+      FontStyle     = "Bold",
+      FontSize      = 18,
+      Size          = {150, 22},
+      Position      = {5, y}
+    })
+    y = y + 22
+    table.insert(graphics,{
+      Type          = "GroupBox",
+      Position      = {5, y},
+      Size          = {375,440}
+    })
+    y = y + 10
+  
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Auto Switch:",
+      Position      = {10, y}
+    })
+    layout["AutoSwitchEnable"] = {
+      PrettyName    = "Control~Auto Switch",
+      Style         = "Button",
+      Position      = { 165, y }
+    }
+    y = y + 20
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Select Layout:",
+      Position      = {10, y}
+    })
+    layout["LayoutSelect"] = {
+      PrettyName    = "Control~Select Layout",
+      Style         = "ComboBox",
+      Position      = { 165, y },
+      Size          = {200, 18}
+    }
+    y = y + 20
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Select Scene:",
+      Position      = {10, y}
+    })
+    layout["SceneSelect"] = {
+      PrettyName    = "Control~Select Scene",
+      Style         = "ComboBox",
+      Position      = { 165, y },
+      Size          = {200, 18}
+    }
+    y = y + 39
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Camera Select:",
+      Position      = {10, y}
+    })
+    layout["CameraSelect"] = {
+      PrettyName    = "Control~Camera~Select Camera",
+      Style         = "ComboBox",
+      Position      = { 165, y }
+    }
+    y = y + 45
+    
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Pan, Tilt, and Zoom Controls",
+      Position      = {89, y},
+      Size          = {64, 102}
+    })
+    layout["CameraPTZUp"] = {
+      PrettyName    = "Control~Camera~PTZ~Up",
+      Style         = "Button",
+      IconColor     = "White",
+      Position      = { 200, y },
+      Size          = {32, 32}
+    }
+    layout["CameraPTZDown"] = {
+      PrettyName    = "Control~Camera~PTZ~Down",
+      Style         = "Button",
+      IconColor     = "White",
+      Position      = { 200, y + 70 },
+      Size          = {32, 32}
+    }
+    layout["CameraPTZLeft"] = {
+      PrettyName    = "Control~Camera~PTZ~Left",
+      Style         = "Button",
+      IconColor     = "White",
+      Position      = { 165, y + 35 },
+      Size          = {32, 32}
+    }
+    layout["CameraPTZRight"] = {
+      PrettyName    = "Control~Camera~PTZ~Right",
+      Style         = "Button",
+      IconColor     = "White",
+      Position      = { 235, y + 35 },
+      Size          = {32, 32}
+    }
+    layout["CameraPTZZoomOut"] = {
+      PrettyName    = "Control~Camera~PTZ~Zoom Out",
+      Style         = "Button",
+      IconColor     = "White",
+      Position      = { 270, y },
+      Size          = {32, 32}
+    }
+    layout["CameraPTZZoomIn"] = {
+      PrettyName    = "Control~Camera~PTZ~Zoom In",
+      Style         = "Button",
+      IconColor     = "White",
+      Position      = { 270, y + 35 },
+      Size          = {32, 32}
+    }
+    y = y + 122
+
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Tracking",
+      Position      = {89, y},
+      Size          = {64, 32}
+    })
+    layout["CameraTrackOn"] = {
+      PrettyName    = "Control~Camera~Tracking~On",
+      Style         = "RecallButton",
+      Legend        = "On",
+      Position      = { 165, y }
+    }
+    layout["CameraTrackOff"] = {
+      PrettyName    = "Control~Camera~Tracking~Off",
+      Style         = "SaveButton",
+      Legend        = "Off",
+      Position      = { 197, y }
+    }
+    y = y + 62
+
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Presets",
+      Position      = {89, y},
+      Size          = {64, 64}
+    })
+    x = 165
+    layout["CameraPresetNumber"] = {
+      PrettyName    = "Control~Camera~Preset~Number",
+      Style         = "ComboBox",
+      Position      = { 165, y },
+      Size          = {64, 18}
+    }
+    y = y + 32
+
+    x = 165
+    layout["CameraPresetRecall"] = {
+      PrettyName    = "Control~Camera~Preset~Recall",
+      Style         = "RecallButton",
+      Legend        = "Load",
+      Position      = { x, y }
+    }
+    x = x + 32
+    layout["CameraPresetSave"] = {
+      PrettyName    = "Control~Camera~Preset~Save",
+      Style         = "SaveButton",
+      Legend        = "Save",
+      Position      = { x, y },
+      Size          = {32, 32}
+    }
+    y = y + 62
+
+    table.insert(graphics,{
+      Type          = "Label",
+      Text          = "Restart VX:",
+      Position      = {10, y}
+    })
+    layout["RestartVX"] = {
+      PrettyName    = "Control~Restart VX",
+      Style         = "Button",
+      Color          = Color.Red,
+      OffColor       = Color.DarkRed,
+      Position      = { 165, y }
+    }
+    y = y + 20
+  end
+  
+  -- Watermark
+  y = y + 8
+  table.insert(graphics,{
+    Type          = "Label",
+    Text          = string.format("Version %s", PluginInfo.Version),
+    FontSize      = 10,
+    Color         = Color.Gray,
+    Position      = {230, y},
+    Size          = {150, 12}
+  })
+  
+  --Add default formatting
+  for _,obj in ipairs(graphics) do
+    if defaults[obj.Type] then
+      for name,value in pairs(defaults[obj.Type]) do
+        obj[name] = obj[name] or value
+      end
+    end
+  end
+  for _,obj in pairs(layout) do
+    if defaults[obj.Style] then
+      for name,value in pairs(defaults[obj.Style]) do
+        obj[name] = obj[name] or value
+      end
+    end
+  end
+  return layout, graphics
+end
+
+
+--Start event based logic
+if Controls then
+
+  json = require("rapidjson")
+  
+  -- Control aliases
+  Status                = Controls.Status
+  AutoSwitchStatus      = Controls.AutoSwitchStatus
+  Username              = Controls.Username
+  Password              = Controls.Password
+  ServerURL             = Controls.ServerURL
+  AutoSwitchEnable      = Controls.AutoSwitchEnable
+  LayoutSelect          = Controls.LayoutSelect
+  SceneSelect           = Controls.SceneSelect
+  CameraSelect          = Controls.CameraSelect
+  CameraPTZUp           = Controls.CameraPTZUp
+  CameraPTZDown         = Controls.CameraPTZDown
+  CameraPTZLeft         = Controls.CameraPTZLeft
+  CameraPTZRight        = Controls.CameraPTZRight
+  CameraPTZZoomIn       = Controls.CameraPTZZoomIn
+  CameraPTZZoomOut      = Controls.CameraPTZZoomOut
+  CameraTrackOn         = Controls.CameraTrackOn
+  CameraTrackOff        = Controls.CameraTrackOff
+  CameraPresetNumber    = Controls.CameraPresetNumber
+  CameraPresetRecall    = Controls.CameraPresetRecall
+  CameraPresetSave      = Controls.CameraPresetSave
+  RestartVX             = Controls.RestartVX
+  Reconnect             = Controls.Reconnect
+  
+  -- Variables and flags
+  DebugInfo     = false
+  DebugFunction = false
+  DebugPrint    = Properties["Debug Print"].Value
+
+  loggedIn = false
+  encoded = ""
+  token = ""
+  arLayouts = {}
+  arScenes = {}
+  CameraMoving = false
+  
+  -- Sockets and services
+  
+  -- Timers, tables, and constants
+  StatusState    = { 
+    OK           = 0, 
+    COMPROMISED  = 1, 
+    FAULT        = 2, 
+    NOTPRESENT   = 3, 
+    MISSING      = 4, 
+    INITIALIZING = 5
+  }
+
+  pollStatus = Timer.New()
+
+  Status.Value = 5 --Initializing
+
+   -- A function to determine common print statement scenarios for troubleshooting
+    function SetupDebugPrint()
+      if DebugPrint == "Function Calls" then
+        DebugFunction = true
+      elseif DebugPrint == "Notification" then
+        DebugInfo = true
+      elseif DebugPrint == "All" then
+        DebugInfo,DebugFunction = true,true
+      end
+    end
+
+  -- this function converts a string to base64
+  function to_base64(data)
+    if DebugFunction then print("to_base64() Called") end
+    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    return ((data:gsub('.', function(x) 
+      local r,b='',x:byte()
+      for i=8,1,-1 do r=r..(b%2^i-b%2^(i-1)>0 and '1' or '0') end
+      return r;
+    end)..'0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
+      if (#x < 6) then return '' end
+        local c=0
+        for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end
+        return b:sub(c+1,c+1)
+      end)..({ '', '==', '=' })[#data%3+1])
+  end
+
+  -- Update Authorization when username or password changes. 
+  Username.EventHandler = function()
+    if string.len(Username.String) > 0 and string.len(Password.String) > 0  then
+      local data = Username.String .. ":" .. Password.String
+      encoded = to_base64(data)
+      if DebugInfo then print(encoded) end
+      if string.len(ServerURL.String) > 0 then logIn() end
+    end
+  end
+
+  Password.EventHandler = function()
+    if string.len(Username.String) > 0 and string.len(Password.String) > 0 then
+      local data = Username.String .. ":" .. Password.String
+      encoded = to_base64(data)
+      if DebugInfo then print(encoded) end
+      if string.len(ServerURL.String) > 0 then logIn() end
+    end
+  end
+  
+  --If URL is updated after usename and passward, login. 
+  ServerURL.EventHandler = function()
+    if string.len(ServerURL.String) > 0 and string.len(encoded) > 0 then
+      logIn()
+    end    
+  end
+
+  --This generates the token for future commands. 
+  function logIn()
+    if DebugFunction then print("logIn() Called") end
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/get-token",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = encoded
+      },
+      Timout = 5,
+      Data = "",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end
+        if DebugInfo then print("data: "..data) end
+        if string.find(data,"\"",21) ~= nil then 
+          token = string.sub(data,string.find(data,"token\":\"")+8,string.find(data,"\"",string.find(data,"token\":\"")+8)-1) 
+          if DebugInfo then print("Token is "..token) end
+          loggedIn = true
+          Status.Value = 0 --OK
+          pollStatus:Start(2)
+        else
+          loggedIn = false
+          Status.Value = 2 --FAULT
+          Status.String = "Failed to log in to VX!"
+          pollStatus:Stop()
+        end
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    } 
+  end
+
+  
+
+  -- If URL, Username and password are all entered on startup, log in. 
+  if string.len(ServerURL.String) > 0 and string.len(Username.String) > 0 and string.len(Password.String) > 0  then
+    local data = Username.String .. ":" .. Password.String
+    encoded = to_base64(data)
+    if DebugInfo then print(encoded) end
+    if string.len(ServerURL.String) > 0 then logIn() end
+  end
+
+  -- If Reconnect is triggered, log in. 
+  Reconnect.EventHandler = function()
+    if string.len(ServerURL.String) > 0 and string.len(Username.String) > 0 and string.len(Password.String) > 0  then
+      local data = Username.String .. ":" .. Password.String
+      encoded = to_base64(data)
+      if DebugInfo then print(encoded) end
+      if string.len(ServerURL.String) > 0 then logIn() end
+    end
+  end
+  
+  -- Get status every 2  seconds
+  pollStatus.EventHandler = function()
+    getStatus()
+  end
+  
+  -- This functions gets all statuses from VX
+  function getStatus()
+    if DebugFunction then print("getStatus Called") end
+    if loggedIn then
+      HttpClient.Post{
+	      Url = "http://"..ServerURL.String..":3579/api/GetAllStatus",
+      	Headers = {
+      		["Content-Type"] = "application/json",
+      		Authorization = token
+      	},
+        Timout = 5,
+        Data = "",
+        EventHandler = function(table, code, data, err, headers)
+          if DebugInfo then print("Code: "..code) end 
+          if DebugInfo then print("data: "..data) end
+          parseResponse(data)
+          if err ~= nil and DebugInfo then print("Error: "..err) end
+        end
+      }
+    end
+  end
+
+  -- This function parses any responses from the VX
+  function parseResponse(Data)
+    if DebugFunction then print("parseResponse() Called") end
+    if Data ~= nil then
+      
+      --Find Auto Switch Status and update plugin
+      start, stop = string.find(Data,"\"AutoSwitchStatus\",\"response_code\":")
+      if start ~= nil then
+        AutoStatCode = string.sub(Data,stop+1,stop+4)
+        if DebugInfo then print("Auto Switch Response Code: "..AutoStatCode) end
+        start, stop = string.find(Data,"\\\"results\\\":",stop)
+        AutoSwitch = string.sub(Data,stop+1,stop+1)
+        if DebugInfo then print("Auto Switch value "..AutoSwitch) end
+        if AutoSwitch == "t" then
+          AutoSwitchEnable.Boolean = true
+          AutoSwitchStatus = true
+          if DebugInfo then print("Auto Switch is Enabled") end
+        elseif AutoSwitch == "f" then
+          AutoSwitchEnable.Boolean = false
+          AutoSwitchStatus = false
+          if DebugInfo then print("Auto Switch is Disable") end
+        else
+          if DebugInfo then print("Auto Switch error") end
+        end
+      end
+     
+      --Find Camera Count and update plugin
+      start = 0
+      stop = 0
+      emptyTable = {}
+      start, stop = string.find(Data,"\"GetCameras\",\"response_code\":")
+      if stop ~= nil then
+        CamCode = string.sub(Data,stop+1,stop+4)
+        if DebugInfo then print("Camera Response Code: "..CamCode) end
+        camEnd = string.find(Data,"}]}",stop)
+        getCam = string.sub(Data,stop,camEnd)
+        if DebugInfo then print("Data received about cameras: "..getCam) end
+        i = 0
+        i2 = 0
+        i3 = 0
+        while true do
+          i, i2 = string.find(getCam, "\\\"id\\\":", i+1)    -- find 'next' camera id
+          if i == nil then break end
+          i3 = string.find(getCam, ",\\\"model\\\":", i2)
+          iCam = string.sub(getCam,i2+1,i3-1)
+          if DebugInfo then print("Camera at pos "..i2.." is "..iCam) end
+          table.insert(emptyTable, iCam)
+          CameraSelect.Choices = emptyTable
+        end
+      end
+     
+      --Find Camera Status and update plugin
+      start = 0
+      stop = 0
+      camStatEnd = 0
+      start, stop = string.find(Data,"\"CameraStatus\",\"response_code\":")
+      if stop ~= nil then 
+        CamStatCode = string.sub(Data,stop+1,stop+4)
+        if DebugInfo then print("Camera Status Response Code: "..CamStatCode) end
+        start, stop = string.find(Data,"\\\"address\\\":\\\"",stop)
+        camStatEnd = string.find(Data,"\\\",\\",stop)
+        selectedCam = string.sub(Data,stop+1,camStatEnd-1)
+        if DebugInfo then print("Selected Camera is "..selectedCam) end
+        CameraSelect.String = selectedCam
+      end
+     
+      --Find Layout Count and update plugin
+      start = 0
+      stop = 0
+      start, stop = string.find(Data,"\"GetLayouts\",\"response_code\":")
+      if stop ~= nil then
+        LayoutStatCode = string.sub(Data,stop+1,stop+4)
+        if DebugInfo then print("Layout Response Code: "..LayoutStatCode) end
+        LayoutEnd = string.find(Data,"}]}",stop)
+        getLayout = string.sub(Data,stop,LayoutEnd)
+        if DebugInfo then print("Data received about layouts: "..getLayout) end
+        i = 0
+        i2 = 0
+        i3 = 0
+        arLayouts = {}
+        while true do
+          i, i2 = string.find(getLayout, "\\\"id\\\":\\\"", i+1)    -- find 'next' layout id
+          if i == nil then break end
+          i3 = string.find(getLayout, "\\\",\\\"name\\\":\\\"", i2)
+          LayoutID = string.sub(getLayout,i2+1,i3-1)
+          if DebugInfo then print("Layout ID at pos "..i2.." is "..LayoutID) end
+          i, i2 = string.find(getLayout, ",\\\"name\\\":\\\"", i+1)    -- find 'next' layout name
+          if i == nil then break end
+          i3 = string.find(getLayout, "\\\"}", i2)
+          LayoutName = string.sub(getLayout,i2+1,i3-1)
+          if DebugInfo then print("Layout Name at pos "..i2.." is "..LayoutName) end
+          table.insert(arLayouts, LayoutName)
+          arLayouts[LayoutName] = LayoutID
+          LayoutSelect.Choices = arLayouts
+        end
+      end
+      
+      --Find Layout Status and update plugin
+      start = 0
+      stop = 0
+      layoutStatEnd = 0
+      start, stop = string.find(Data,"\"LayoutStatus\",\"response_code\":")
+      if stop ~= nil then
+        layoutStatCode = string.sub(Data,stop+1,stop+4)
+        if DebugInfo then print("Layout Status Response Code: "..layoutStatCode) end
+        start, stop = string.find(Data,"\\\"name\\\":\\\"",stop)
+        layoutStatEnd = string.find(Data,"\\\"}",stop)
+        selectedLayout = string.sub(Data,stop+1,layoutStatEnd-1)
+        if DebugInfo then print("Selected Layout is "..selectedLayout) end
+        LayoutSelect.String = selectedLayout
+      end
+
+      --Find Scene Count and update plugin
+      start = 0
+      stop = 0
+      start, stop = string.find(Data,"\"GetScenarios\",\"response_code\":")
+      if stop ~= nil then
+        SceneStatCode = string.sub(Data,stop+1,stop+4)
+        if DebugInfo then print("Scene Response Code: "..SceneStatCode) end
+        SceneEnd = string.find(Data,"}]}",stop)
+        getScene = string.sub(Data,stop,SceneEnd)
+        if DebugInfo then print("Data received about Scene: "..getScene) end
+        i = 0
+        i2 = 0
+        i3 = 0
+        arScenes = {}
+        while true do
+          i, i2 = string.find(getScene, "\\\"id\\\":", i+1)    -- find 'next' scene id
+          if i == nil then break end
+          i3 = string.find(getScene, ",\\\"name\\\":\\\"", i2)
+          SceneID = string.sub(getScene,i2+1,i3-1)
+          if DebugInfo then print("SceneID ID at pos "..i2.." is "..SceneID) end
+          i, i2 = string.find(getScene, ",\\\"name\\\":\\\"", i+1)    -- find 'next' layout name
+          if i == nil then break end
+          i3 = string.find(getScene, "\\\"}", i2)
+          SceneName = string.sub(getScene,i2+1,i3-1)
+          if DebugInfo then print("Scene Name at pos "..i2.." is "..SceneName) end
+          table.insert(arScenes, SceneName)
+          arScenes[SceneName] = SceneID
+          SceneSelect.Choices = arScenes
+        end
+      end
+      
+      --Find Scene Status and update plugin
+      start = 0
+      stop = 0
+      sceneStatEnd = 0
+      start, stop = string.find(Data,"\"ScenarioStatus\",\"response_code\":")
+      if stop ~= nil then
+        sceneStatCode = string.sub(Data,stop+1,stop+4)
+        if DebugInfo then print("Scene Status Response Code: "..sceneStatCode) end
+        start, stop = string.find(Data,"\\\"name\\\":\\\"",stop)
+        sceneStatEnd = string.find(Data,"\\\"}",stop)
+        selectedScene = string.sub(Data,stop+1,sceneStatEnd-1)
+        if DebugInfo then print("Selected Layout is "..selectedScene) end
+        SceneSelect.String = selectedScene
+      end
+    end
+  end
+
+  -- When Auto Switch is pressed toggle the Auto switch state
+  AutoSwitchEnable.EventHandler = function()
+    if AutoSwitchStatus then
+      HttpClient.Post{
+	      Url = "http://"..ServerURL.String..":3579/api/StopAutoSwitch",
+      	Headers = {
+      		["Content-Type"] = "application/json",
+      		Authorization = token
+      	},
+        Timout = 5,
+        Data = "",
+        EventHandler = function(table, code, data, err, headers)
+          if DebugInfo then print("Code: "..code) end 
+          if DebugInfo then print("data: "..data) end
+          parseResponse(data)
+          if err ~= nil and DebugInfo then print("Error: "..err) end
+        end
+      }
+    elseif AutoSwitchStatus == false then
+      HttpClient.Post{
+	      Url = "http://"..ServerURL.String..":3579/api/StartAutoSwitch",
+      	Headers = {
+      		["Content-Type"] = "application/json",
+      		Authorization = token
+      	},
+        Timout = 5,
+        Data = "",
+        EventHandler = function(table, code, data, err, headers)
+          if DebugInfo then print("Code: "..code) end 
+          if DebugInfo then print("data: "..data) end
+          parseResponse(data)
+          if err ~= nil and DebugInfo then print("Error: "..err) end
+        end
+      }      
+    end
+    
+  end
+
+  -- this portion selects the layout
+  LayoutSelect.EventHandler = function()
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/ChangeLayout",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"id\": \""..arLayouts[LayoutSelect.String].."\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    } 
+  end
+
+  -- this portion selects the scene
+  SceneSelect.EventHandler = function()
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/GoToScenario",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"id\": "..arScenes[SceneSelect.String].."}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    } 
+  end
+
+  -- this portion selects the camera
+  CameraSelect.EventHandler = function()
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/ManualSwitchCamera",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"address\": \""..CameraSelect.String.."\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    } 
+  end
+
+  -- This portion enables. disables tracking on the Cameras
+  CameraTrackOn.EventHandler = function()
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/CallCameraPreset",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"cam\":\""..CameraSelect.String.."\",\"pre\":\"80\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    }
+  end
+  CameraTrackOff.EventHandler = function()
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/CallCameraPreset",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"cam\":\""..CameraSelect.String.."\",\"pre\":\"81\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    }
+  end
+
+  -- this portion is for the camera presets
+  CameraPresetRecall.EventHandler = function()
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/CallCameraPreset",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"cam\":\""..CameraSelect.String.."\",\"pre\":\""..CameraPresetNumber.Value.."\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    } 
+  end
+
+  CameraPresetSave.EventHandler = function()
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/SaveCameraPreset",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"cam\":\""..CameraSelect.String.."\",\"pre\":\""..CameraPresetNumber.Value.."\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    } 
+  end
+
+  -- this portion is for the PTZ of the camera
+  CameraPTZUp.EventHandler = function()
+     if CameraMoving == false then
+      CameraMoving = true
+      HttpClient.Post{
+        Url = "http://"..ServerURL.String..":3579/api/StartPT",
+        Headers = {
+          ["Content-Type"] = "application/json",
+          Authorization = token
+        },
+        Timout = 5,
+        Data = "{\"cam\":\""..CameraSelect.String.."\", \"ptDir\":\"0\"}",
+        EventHandler = function(table, code, data, err, headers)
+          if DebugInfo then print("Code: "..code) end 
+          if DebugInfo then print("data: "..data) end
+          parseResponse(data)
+          if err ~= nil and DebugInfo then print("Error: "..err) end
+        end
+      }
+    else
+      CameraMoving = false
+      HttpClient.Post{
+        Url = "http://"..ServerURL.String..":3579/api/StopPT",
+        Headers = {
+          ["Content-Type"] = "application/json",
+          Authorization = token
+        },
+        Timout = 5,
+        Data = "{\"cam\":\""..CameraSelect.String.."\"}",
+        EventHandler = function(table, code, data, err, headers)
+          if DebugInfo then print("Code: "..code) end 
+          if DebugInfo then print("data: "..data) end
+          parseResponse(data)
+          if err ~= nil and DebugInfo then print("Error: "..err) end
+        end
+      }
+    end
+  end
+  CameraPTZDown.EventHandler = function()
+    if CameraMoving == false then
+      CameraMoving = true
+      HttpClient.Post{
+        Url = "http://"..ServerURL.String..":3579/api/StartPT",
+        Headers = {
+          ["Content-Type"] = "application/json",
+          Authorization = token
+        },
+        Timout = 5,
+        Data = "{\"cam\":\""..CameraSelect.String.."\", \"ptDir\":\"4\"}",
+        EventHandler = function(table, code, data, err, headers)
+          if DebugInfo then print("Code: "..code) end 
+          if DebugInfo then print("data: "..data) end
+          parseResponse(data)
+          if err ~= nil and DebugInfo then print("Error: "..err) end
+        end
+      }
+   else
+      CameraMoving = false
+      HttpClient.Post{
+        Url = "http://"..ServerURL.String..":3579/api/StopPT",
+        Headers = {
+          ["Content-Type"] = "application/json",
+          Authorization = token
+        },
+        Timout = 5,
+        Data = "{\"cam\":\""..CameraSelect.String.."\"}",
+        EventHandler = function(table, code, data, err, headers)
+          if DebugInfo then print("Code: "..code) end 
+          if DebugInfo then print("data: "..data) end
+          parseResponse(data)
+          if err ~= nil and DebugInfo then print("Error: "..err) end
+        end
+      }
+    end
+  end
+  CameraPTZLeft.EventHandler = function()
+    if CameraMoving == false then
+      CameraMoving = true
+      HttpClient.Post{
+        Url = "http://"..ServerURL.String..":3579/api/StartPT",
+        Headers = {
+          ["Content-Type"] = "application/json",
+          Authorization = token
+        },
+        Timout = 5,
+        Data = "{\"cam\":\""..CameraSelect.String.."\", \"ptDir\":\"6\"}",
+        EventHandler = function(table, code, data, err, headers)
+          if DebugInfo then print("Code: "..code) end 
+          if DebugInfo then print("data: "..data) end
+          parseResponse(data)
+          if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    }
+    else
+      CameraMoving = false
+      HttpClient.Post{
+        Url = "http://"..ServerURL.String..":3579/api/StopPT",
+        Headers = {
+          ["Content-Type"] = "application/json",
+          Authorization = token
+        },
+        Timout = 5,
+        Data = "{\"cam\":\""..CameraSelect.String.."\"}",
+        EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    }
+  end
+end
+CameraPTZRight.EventHandler = function()
+  if CameraMoving == false then
+    CameraMoving = true
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/StartPT",
+      Headers = {
+         ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"cam\":\""..CameraSelect.String.."\", \"ptDir\":\"2\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    }
+  else
+    CameraMoving = false
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/StopPT",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"cam\":\""..CameraSelect.String.."\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    }
+  end
+end
+CameraPTZZoomIn.EventHandler = function()
+  if CameraMoving == false then
+    CameraMoving = true
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/StartZ",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"cam\":\""..CameraSelect.String.."\", \"zDir\":\"0\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    }
+  else
+    CameraMoving = false
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/StopZ",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"cam\":\""..CameraSelect.String.."\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    }
+  end
+end
+CameraPTZZoomOut.EventHandler = function()
+  if CameraMoving == false then
+    CameraMoving = true
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/StartZ",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"cam\":\""..CameraSelect.String.."\", \"zDir\":\"1\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    }
+  else
+    CameraMoving = false
+    HttpClient.Post{
+      Url = "http://"..ServerURL.String..":3579/api/StopZ",
+      Headers = {
+        ["Content-Type"] = "application/json",
+        Authorization = token
+      },
+      Timout = 5,
+      Data = "{\"cam\":\""..CameraSelect.String.."\"}",
+      EventHandler = function(table, code, data, err, headers)
+        if DebugInfo then print("Code: "..code) end 
+        if DebugInfo then print("data: "..data) end
+        parseResponse(data)
+        if err ~= nil and DebugInfo then print("Error: "..err) end
+      end
+    }
+  end
+end
+
+-- This function restarts the VX
+RestartVX.EventHandler = function()
+  HttpClient.Post{
+    Url = "http://"..ServerURL.String..":3579/api/Restart",
+    Headers = {
+      ["Content-Type"] = "application/json",
+      Authorization = token
+    },
+    Timout = 5,
+    Data = "",
+    EventHandler = function(table, code, data, err, headers)
+      if DebugInfo then print("Code: "..code) end 
+      if DebugInfo then print("data: "..data) end
+      parseResponse(data)
+      if err ~= nil and DebugInfo then print("Error: "..err) end
+    end
+  }
+end
+
+SetupDebugPrint()
+
+end
