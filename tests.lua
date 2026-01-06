@@ -1,5 +1,5 @@
-lu = require('luaunit')
-local beyond = dofile("../1beyond.qplug")
+lu = require('3rdparty/luaunit')
+local beyond = dofile("1beyond.qplug")
 
 function TestBase64Encoding()
     local decoded  = "Pi = 3.1415 if you like precision!"
